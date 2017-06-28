@@ -1,3 +1,5 @@
 .gradle
 ANTLR_graph.i*
 build
+*.dot
+out

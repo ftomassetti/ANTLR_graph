@@ -1,6 +1,7 @@
 package me.tomassetti.minicalc.ast
 
 //import me.tomassetti.minicalc.MiniCalcParser
+import org.antlr.v4.runtime.Parser
 import org.antlr.v4.runtime.Vocabulary
 import org.antlr.v4.runtime.atn.ATN
 import org.antlr.v4.runtime.atn.ATNState
@@ -15,11 +16,8 @@ import org.snt.inmemantlr.memobjects.MemoryTuple
 import org.snt.inmemantlr.memobjects.MemoryTupleSet
 
 
-
-
-
 fun ATNState.name() = "state${this.stateNumber}"
-fun ATNState.label(ruleNames: List<String>) = if (this.ruleIndex == -1) name() else "[$stateNumber] ${this.javaClass.simpleName.removeSuffix("State")} ${ruleNames[this.ruleIndex]}"
+fun ATNState.label(ruleNames: Array<String>) = if (this.ruleIndex == -1) name() else "[$stateNumber] ${this.javaClass.simpleName.removeSuffix("State")} ${ruleNames[this.ruleIndex]}"
 
 //val rulesToExclude = setOf(MiniCalcParser.RULE_expression)
 
@@ -64,7 +62,7 @@ private fun ATNState.isConnectedToState(atnState: ATNState): Boolean {
 
 private fun Transition.isConnectedToRule(ruleIndex: Int): Boolean = this.target.ruleIndex == ruleIndex
 
-private fun writeCluster(atn: ATN, vocabulary: Vocabulary, ruleNames: List<String>, ruleIndex: Int, out: PrintWriter, onlyRelationTo: Int? = null) {
+private fun writeCluster(atn: ATN, vocabulary: Vocabulary, ruleNames: Array<String>, ruleIndex: Int, out: PrintWriter, onlyRelationTo: Int? = null) {
     out.println("subgraph cluster_$ruleIndex {")
     if (onlyRelationTo != null && onlyRelationTo != ruleIndex) {
         out.println("  style = dotted;")
@@ -97,89 +95,96 @@ private fun ATNState.isOrphan(): Boolean {
     return this.transitions.isEmpty() && !this.atn.states.any { it.isConnectedToState(this) }
 }
 
+class MyClassLoader(val bytecodeInMemory: MemoryTupleSet) : ClassLoader() {
+    override fun findClass(name: String?): Class<*>? {
+        val element = bytecodeInMemory.map { it.byteCodeObjects.find { it.className == name } }.find { it != null}
+        return if (element == null) {
+            null
+        } else {
+            defineClass(name, element.bytes, 0, element.bytes.size)
+        }
+    }
+}
 
 fun main(args: Array<String>) {
-
-    if (args.size != 1) {
-        System.err.println("Specify the path to a single grammar file")
-        System.exit(1)
-    }
-
-    val f = File(args[0])
-    val gp = GenericParser(f)
+    //args.forEach {
+    val files : Array<File> = args.map { File(it) }.toTypedArray()
+    val gp = GenericParser(*files)
+    gp.compile()
 
     val set = gp.allCompiledObjects
     // memory tuple contains the generated source code of ANTLR
     // and the associated byte code
+    val myClassLoader = MyClassLoader(set)
+    val myClasses = HashMap<String, Class<*>>()
     for (tup in set) {
-        // get source code object
-        val ms = tup.source
-        // get byte code objects
-        val bcode = tup.byteCodeObjects
+        for (byteCodeObject in tup.byteCodeObjects) {
+            val c = myClassLoader.loadClass(byteCodeObject.className)
+            myClasses[c.canonicalName] = c
+        }
+    }
+    val parserClass = myClasses.values.find { it.superclass?.canonicalName == Parser::class.java.canonicalName }!!
+    val atn = parserClass.getField("_ATN").get(null) as ATN
+    val ruleNames = parserClass.getField("ruleNames").get(null) as Array<String>
+    val vocabulary = parserClass.getField("VOCABULARY").get(null) as Vocabulary
+
+    val nRules = atn.ruleToStartState.size
+
+    for (ruleIndex in 0..(nRules-1)) {
+        val ruleName = ruleNames[ruleIndex]
+        drawClusters("clusters_for_$ruleName.dot", "ATN for MiniCalcFun ($ruleName)", atn, vocabulary, ruleNames, nRules, ruleIndex)
     }
 
 
-//    val atn = MiniCalcParser._ATN
-//    val ruleNames = LinkedList<String>()
-//    val vocabulary : Vocabulary = null
-//
-//    val nRules = atn.ruleToStartState.size
-//
-//    for (ruleIndex in 0..(nRules-1)) {
-//        val ruleName = ruleNames[ruleIndex]
-//        drawClusters("clusters_for_$ruleName", "ATN for MiniCalcFun ($ruleName)", atn, nRules, ruleIndex)
-//    }
-//
-//
-//    //for (ruleIndex in 0..(nRules-1)) {
-//        File("atn.dot").printWriter().use { out ->
-//            out.println("digraph ATN {")
-//            atn.states.forEach { state ->
-//                out.println("    ${state.name()} [shape=rectangle, label=\"${state.label()}\", fillcolor=\"${colorForRule(state.ruleIndex).toHtml()}\", style=filled];")
-//            }
-//            atn.states.forEach { state ->
-//                state.transitions.forEach { transition ->
-//                    if (transition.isEpsilon) {
-//                        out.println("    ${state.name()} -> ${transition.target.name()}")
-//                    } else {
-//                        transition.label().toList().forEach { item ->
-//                            out.println("    ${state.name()} -> ${transition.target.name()} [label=\"${vocabulary.getDisplayName(item)}\"]")
-//                        }
-//                    }
-//                }
-//            }
-//            out.println("    labelloc=\"t\";")
-//            out.println("    label=\"ATN for MiniCalcFun\";")
-//            out.println("}")
-//        }
-//    //}
-//
-//    for (ruleIndex in 0..(nRules-1)) {
-//        File("atn_${ruleIndex}.dot").printWriter().use { out ->
-//            out.println("digraph ATN_for_${ruleNames[ruleIndex]} {")
-//            atn.states.filter { it.ruleIndex == ruleIndex }.forEach { state ->
-//                out.println("    ${state.name()} [shape=rectangle, label=\"${state.label()}\"];")
-//            }
-//            atn.states.filter { it.ruleIndex == ruleIndex }.forEach { state ->
-//                state.transitions/*.filter { !rulesToExclude.contains(it.target.ruleIndex) }*/.forEach { transition ->
-//                    if (transition.isEpsilon) {
-//                        out.println("    ${state.name()} -> ${transition.target.name()}")
-//                    } else {
-//                        transition.label().toList().forEach { item ->
-//                            out.println("    ${state.name()} -> ${transition.target.name()} [label=\"${vocabulary.getDisplayName(item)}\"]")
-//                        }
-//                    }
-//                }
-//            }
-//            out.println("    labelloc=\"t\";")
-//            out.println("    label=\"ATN for ${ruleNames[ruleIndex]}\";")
-//            out.println("}")
-//        }
-//    }
+    //for (ruleIndex in 0..(nRules-1)) {
+        File("atn.dot").printWriter().use { out ->
+            out.println("digraph ATN {")
+            atn.states.forEach { state ->
+                out.println("    ${state.name()} [shape=rectangle, label=\"${state.label(ruleNames)}\", fillcolor=\"${colorForRule(state.ruleIndex).toHtml()}\", style=filled];")
+            }
+            atn.states.forEach { state ->
+                state.transitions.forEach { transition ->
+                    if (transition.isEpsilon) {
+                        out.println("    ${state.name()} -> ${transition.target.name()}")
+                    } else {
+                        transition.label().toList().forEach { item ->
+                            out.println("    ${state.name()} -> ${transition.target.name()} [label=\"${vocabulary.getDisplayName(item)}\"]")
+                        }
+                    }
+                }
+            }
+            out.println("    labelloc=\"t\";")
+            out.println("    label=\"ATN for MiniCalcFun\";")
+            out.println("}")
+        }
+    //}
+
+    for (ruleIndex in 0..(nRules-1)) {
+        File("atn_${ruleIndex}.dot").printWriter().use { out ->
+            out.println("digraph ATN_for_${ruleNames[ruleIndex]} {")
+            atn.states.filter { it.ruleIndex == ruleIndex }.forEach { state ->
+                out.println("    ${state.name()} [shape=rectangle, label=\"${state.label(ruleNames)}\"];")
+            }
+            atn.states.filter { it.ruleIndex == ruleIndex }.forEach { state ->
+                state.transitions/*.filter { !rulesToExclude.contains(it.target.ruleIndex) }*/.forEach { transition ->
+                    if (transition.isEpsilon) {
+                        out.println("    ${state.name()} -> ${transition.target.name()}")
+                    } else {
+                        transition.label().toList().forEach { item ->
+                            out.println("    ${state.name()} -> ${transition.target.name()} [label=\"${vocabulary.getDisplayName(item)}\"]")
+                        }
+                    }
+                }
+            }
+            out.println("    labelloc=\"t\";")
+            out.println("    label=\"ATN for ${ruleNames[ruleIndex]}\";")
+            out.println("}")
+        }
+    }
 
 }
 
-private fun drawClusters(fileName: String, title: String, atn: ATN, vocabulary: Vocabulary, ruleNames: List<String>, nRules: Int, onlyRelationTo: Int? = null) {
+private fun drawClusters(fileName: String, title: String, atn: ATN, vocabulary: Vocabulary, ruleNames: Array<String>, nRules: Int, onlyRelationTo: Int? = null) {
     File(fileName).printWriter().use { out ->
         out.println("digraph ATN {")
         out.println("   remincross =true")
