@@ -15,8 +15,6 @@ import java.io.PrintWriter
 fun ATNState.name() = "state${this.stateNumber}"
 fun ATNState.label(ruleNames: Array<String>) = if (this.ruleIndex == -1) name() else "[$stateNumber] ${this.javaClass.simpleName.removeSuffix("State")} ${ruleNames[this.ruleIndex]}"
 
-//val rulesToExclude = setOf(MiniCalcParser.RULE_expression)
-
 fun colorForRule(index: Int) : Color {
     val r = (index * 7) % 128 + 128
     val g = (index * 31) % 128 + 128
@@ -102,9 +100,7 @@ class MyClassLoader(val bytecodeInMemory: MemoryTupleSet) : ClassLoader() {
     }
 }
 
-fun main(args: Array<String>) {
-    //args.forEach {
-    val files : Array<File> = args.map { File(it) }.toTypedArray()
+private fun compileAndGetParserClass(files: Array<File>) : Class<*> {
     val gp = GenericParser(*files)
     gp.compile()
 
@@ -120,6 +116,10 @@ fun main(args: Array<String>) {
         }
     }
     val parserClass = myClasses.values.find { it.superclass?.canonicalName == Parser::class.java.canonicalName }!!
+    return parserClass
+}
+
+fun generateGraphsForParserClass(parserClass: Class<*>) {
     val atn = parserClass.getField("_ATN").get(null) as ATN
     val ruleNames = parserClass.getField("ruleNames").get(null) as Array<String>
     val vocabulary = parserClass.getField("VOCABULARY").get(null) as Vocabulary
@@ -131,29 +131,26 @@ fun main(args: Array<String>) {
         drawClusters("clusters_for_$ruleName.dot", "ATN for rule $ruleName", atn, vocabulary, ruleNames, nRules, ruleIndex)
     }
 
-
-    //for (ruleIndex in 0..(nRules-1)) {
-        File("atn.dot").printWriter().use { out ->
-            out.println("digraph ATN {")
-            atn.states.forEach { state ->
-                out.println("    ${state.name()} [shape=rectangle, label=\"${state.label(ruleNames)}\", fillcolor=\"${colorForRule(state.ruleIndex).toHtml()}\", style=filled];")
-            }
-            atn.states.forEach { state ->
-                state.transitions.forEach { transition ->
-                    if (transition.isEpsilon) {
-                        out.println("    ${state.name()} -> ${transition.target.name()}")
-                    } else {
-                        transition.label().toList().forEach { item ->
-                            out.println("    ${state.name()} -> ${transition.target.name()} [label=\"${vocabulary.getDisplayName(item)}\"]")
-                        }
+    File("atn.dot").printWriter().use { out ->
+        out.println("digraph ATN {")
+        atn.states.forEach { state ->
+            out.println("    ${state.name()} [shape=rectangle, label=\"${state.label(ruleNames)}\", fillcolor=\"${colorForRule(state.ruleIndex).toHtml()}\", style=filled];")
+        }
+        atn.states.forEach { state ->
+            state.transitions.forEach { transition ->
+                if (transition.isEpsilon) {
+                    out.println("    ${state.name()} -> ${transition.target.name()}")
+                } else {
+                    transition.label().toList().forEach { item ->
+                        out.println("    ${state.name()} -> ${transition.target.name()} [label=\"${vocabulary.getDisplayName(item)}\"]")
                     }
                 }
             }
-            out.println("    labelloc=\"t\";")
-            out.println("    label=\"ATN for the language\";")
-            out.println("}")
         }
-    //}
+        out.println("    labelloc=\"t\";")
+        out.println("    label=\"ATN for the language\";")
+        out.println("}")
+    }
 
     for (ruleIndex in 0..(nRules-1)) {
         File("atn_${ruleIndex}.dot").printWriter().use { out ->
@@ -177,7 +174,12 @@ fun main(args: Array<String>) {
             out.println("}")
         }
     }
+}
 
+fun main(args: Array<String>) {
+    val files : Array<File> = args.map { File(it) }.toTypedArray()
+    val parserClass = compileAndGetParserClass(files)
+    generateGraphsForParserClass(parserClass)
 }
 
 private fun drawClusters(fileName: String, title: String, atn: ATN, vocabulary: Vocabulary, ruleNames: Array<String>, nRules: Int, onlyRelationTo: Int? = null) {
@@ -188,9 +190,6 @@ private fun drawClusters(fileName: String, title: String, atn: ATN, vocabulary: 
             writeCluster(atn, vocabulary, ruleNames, ruleIndex, out, onlyRelationTo)
         }
 
-        //atn.states.forEach { state ->
-        //    out.println("    ${state.name()} [shape=rectangle, label=\"${state.label()}\", fillcolor=\"${colorForRule(state.ruleIndex).toHtml()}\", style=filled];")
-        //}
         interClusterRelations(atn, vocabulary, out, onlyRelationTo)
         out.println("    labelloc=\"t\";")
         out.println("    label=\"$title\";")
