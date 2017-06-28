@@ -1,19 +1,15 @@
-package me.tomassetti.minicalc.ast
+package me.tomassetti.antlrgraph
 
-//import me.tomassetti.minicalc.MiniCalcParser
 import org.antlr.v4.runtime.Parser
 import org.antlr.v4.runtime.Vocabulary
 import org.antlr.v4.runtime.atn.ATN
 import org.antlr.v4.runtime.atn.ATNState
 import org.antlr.v4.runtime.atn.Transition
+import org.snt.inmemantlr.GenericParser
+import org.snt.inmemantlr.memobjects.MemoryTupleSet
 import java.awt.Color
 import java.io.File
 import java.io.PrintWriter
-import org.snt.inmemantlr.GenericParser
-import org.snt.inmemantlr.memobjects.MemoryByteCode
-import org.snt.inmemantlr.memobjects.MemorySource
-import org.snt.inmemantlr.memobjects.MemoryTuple
-import org.snt.inmemantlr.memobjects.MemoryTupleSet
 
 
 fun ATNState.name() = "state${this.stateNumber}"
@@ -132,7 +128,7 @@ fun main(args: Array<String>) {
 
     for (ruleIndex in 0..(nRules-1)) {
         val ruleName = ruleNames[ruleIndex]
-        drawClusters("clusters_for_$ruleName.dot", "ATN for MiniCalcFun ($ruleName)", atn, vocabulary, ruleNames, nRules, ruleIndex)
+        drawClusters("clusters_for_$ruleName.dot", "ATN for rule $ruleName", atn, vocabulary, ruleNames, nRules, ruleIndex)
     }
 
 
@@ -154,7 +150,7 @@ fun main(args: Array<String>) {
                 }
             }
             out.println("    labelloc=\"t\";")
-            out.println("    label=\"ATN for MiniCalcFun\";")
+            out.println("    label=\"ATN for the language\";")
             out.println("}")
         }
     //}

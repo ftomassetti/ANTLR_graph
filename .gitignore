@@ -3,3 +3,4 @@ ANTLR_graph.i*
 build
 *.dot
 out
+*.png
