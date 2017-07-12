@@ -131,7 +131,8 @@ fun generateGraphsForParserClass(parserClass: Class<*>) {
         drawClusters("clusters_for_$ruleName.dot", "ATN for rule $ruleName", atn, vocabulary, ruleNames, nRules, ruleIndex)
     }
 
-    File("atn.dot").printWriter().use { out ->
+    val fileName = "atn.dot"
+    File(fileName).printWriter().use { out ->
         out.println("digraph ATN {")
         atn.states.forEach { state ->
             out.println("    ${state.name()} [shape=rectangle, label=\"${state.label(ruleNames)}\", fillcolor=\"${colorForRule(state.ruleIndex).toHtml()}\", style=filled];")
@@ -151,9 +152,11 @@ fun generateGraphsForParserClass(parserClass: Class<*>) {
         out.println("    label=\"ATN for the language\";")
         out.println("}")
     }
+    println("* graph for entire parser class saved to $fileName")
 
     for (ruleIndex in 0..(nRules-1)) {
-        File("atn_${ruleIndex}.dot").printWriter().use { out ->
+        val fileName = "atn_$ruleIndex.dot"
+        File(fileName).printWriter().use { out ->
             out.println("digraph ATN_for_${ruleNames[ruleIndex]} {")
             atn.states.filter { it.ruleIndex == ruleIndex }.forEach { state ->
                 out.println("    ${state.name()} [shape=rectangle, label=\"${state.label(ruleNames)}\"];")
@@ -173,6 +176,7 @@ fun generateGraphsForParserClass(parserClass: Class<*>) {
             out.println("    label=\"ATN for ${ruleNames[ruleIndex]}\";")
             out.println("}")
         }
+        println("* graph for rule ${ruleNames[ruleIndex]} saved to $fileName")
     }
 }
 
@@ -195,6 +199,7 @@ private fun drawClusters(fileName: String, title: String, atn: ATN, vocabulary: 
         out.println("    label=\"$title\";")
         out.println("}")
     }
+    println("* clusters saved to $fileName")
 }
 
 private fun interClusterRelations(atn: ATN, vocabulary: Vocabulary, out: PrintWriter, onlyRelationTo: Int? = null) {
